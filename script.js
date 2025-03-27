@@ -1,97 +1,79 @@
-//  1. GLOBAL VARIABLES
-const filmsList = document.getElementById("films");
-const title = document.getElementById("title");
-const runtime = document.getElementById("runtime");
-const showtime = document.getElementById("showtime");
-const poster = document.getElementById("poster");
-const description = document.getElementById("description");
-const buyTicketBtn = document.getElementById("buy-ticket");
-
-const API_URL = "http://localhost:3000/films";
-
-//  2. INITIALIZE APP ON PAGE LOAD
 document.addEventListener("DOMContentLoaded", () => {
-    fetchMovies();
-});
+    const filmsList = document.getElementById("films");
+    const movieDetails = document.getElementById("movie-details");
+    const buyTicketBtn = document.getElementById("buy-ticket");
+    let selectedMovie;
 
-//  3. FETCH MOVIES FROM SERVER
-function fetchMovies() {
-    fetch(API_URL)
-        .then(res => res.json())
+    // Fetch and display all movies
+    fetch("http://localhost:3000/films")
+        .then(response => response.json())
         .then(movies => {
-            filmsList.innerHTML = ""; // Clear previous movies
+            filmsList.innerHTML = ""; // Clear existing list
             movies.forEach(movie => renderMovieListItem(movie));
-            fetchMovieDetails(movies[0].id); // Load first movie by default
-        })
-        .catch(error => console.error("Error fetching movies:", error));
-}
+            displayMovieDetails(movies[0]);
+        });
 
-//  4. RENDER MOVIE LIST
-function renderMovieListItem(movie) {
-    const li = document.createElement("li");
-    li.textContent = movie.title;
-    li.classList.add("film", "item");
-    li.addEventListener("click", () => fetchMovieDetails(movie.id));
+    function renderMovieListItem(movie) {
+        const li = document.createElement("li");
+        li.className = "film item";
+        li.textContent = movie.title;
+        li.dataset.id = movie.id;
+        li.addEventListener("click", () => displayMovieDetails(movie));
 
-    // Delete Button
-    const deleteBtn = document.createElement("button");
-    deleteBtn.textContent = "X";
-    deleteBtn.classList.add("delete-btn");
-    deleteBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        deleteMovie(movie.id, li);
+        const deleteBtn = document.createElement("button");
+        deleteBtn.textContent = "Delete";
+        deleteBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            deleteMovie(movie.id, li);
+        });
+
+        li.appendChild(deleteBtn);
+        filmsList.appendChild(li);
+    }
+
+    function displayMovieDetails(movie) {
+        selectedMovie = movie;
+        document.getElementById("poster").src = movie.poster;
+        document.getElementById("title").textContent = movie.title;
+        document.getElementById("runtime").textContent = `${movie.runtime} mins`;
+        document.getElementById("showtime").textContent = movie.showtime;
+        updateTicketCount(movie);
+    }
+
+    function updateTicketCount(movie) {
+        const availableTickets = movie.capacity - movie.tickets_sold;
+        const ticketDisplay = document.getElementById("ticket-num");
+        ticketDisplay.textContent = availableTickets;
+        buyTicketBtn.textContent = availableTickets > 0 ? "Buy Ticket" : "Sold Out";
+        buyTicketBtn.disabled = availableTickets === 0;
+    }
+
+    buyTicketBtn.addEventListener("click", () => {
+        if (!selectedMovie) return;
+        const availableTickets = selectedMovie.capacity - selectedMovie.tickets_sold;
+        if (availableTickets > 0) {
+            selectedMovie.tickets_sold++;
+            updateTicketCount(selectedMovie);
+            updateMovieTickets(selectedMovie.id, selectedMovie.tickets_sold);
+        }
     });
 
-    li.appendChild(deleteBtn);
-    filmsList.appendChild(li);
-}
+    function updateMovieTickets(movieId, ticketsSold) {
+        fetch(`http://localhost:3000/films/${movieId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tickets_sold: ticketsSold })
+        });
 
-//  5. FETCH MOVIE DETAILS
-function fetchMovieDetails(movieId) {
-    fetch(`${API_URL}/${movieId}`)
-        .then(res => res.json())
-        .then(movie => updateMovieDetails(movie))
-        .catch(error => console.error("Error fetching movie details:", error));
-}
+        fetch("http://localhost:3000/tickets", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ film_id: movieId, number_of_tickets: 1 })
+        });
+    }
 
-//  6. UPDATE MOVIE DETAILS IN UI
-function updateMovieDetails(movie) {
-    title.textContent = movie.title;
-    runtime.textContent = `${movie.runtime} mins`;
-    showtime.textContent = movie.showtime;
-    poster.src = movie.poster;
-    description.textContent = movie.description;
-
-    // Update ticket count
-    const availableTickets = movie.capacity - movie.tickets_sold;
-    buyTicketBtn.textContent = availableTickets > 0 ? "Buy Ticket" : "Sold Out";
-    buyTicketBtn.disabled = availableTickets <= 0;
-
-    // Attach event listener
-    buyTicketBtn.onclick = () => buyTicket(movie);
-}
-
-//  7. HANDLE TICKET PURCHASE
-function buyTicket(movie) {
-    if (movie.tickets_sold >= movie.capacity) return;
-
-    const updatedTicketsSold = movie.tickets_sold + 1;
-
-    fetch(`${API_URL}/${movie.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tickets_sold: updatedTicketsSold })
-    })
-    .then(res => res.json())
-    .then(updatedMovie => {
-        updateMovieDetails(updatedMovie);
-    })
-    .catch(error => console.error("Error updating tickets:", error));
-}
-
-//  8. DELETE MOVIE FROM SERVER & UI
-function deleteMovie(movieId, listItem) {
-    fetch(`${API_URL}/${movieId}`, { method: "DELETE" })
-    .then(() => listItem.remove())
-    .catch(error => console.error("Error deleting movie:", error));
-}
+    function deleteMovie(movieId, listItem) {
+        fetch(`http://localhost:3000/films/${movieId}`, { method: "DELETE" })
+            .then(() => listItem.remove());
+    }
+});
